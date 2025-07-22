@@ -1,0 +1,122 @@
+import os
+import pyttsx3
+import speech_recognition as sr
+from google import genai
+from google.genai import types
+
+# 🎚️ Configuration flags
+voice_mode = False
+client = genai.Client(api_key="GEMINI-APIKEY") 
+model = "gemini-2.5-pro"
+history = []
+
+# 🔊 Chunked Text-to-Speech Function
+def speak_chunked(text):
+    engine = pyttsx3.init()
+    sentences = text.strip().split('. ')  # Split response by sentence
+    for sentence in sentences:
+        if sentence:
+            engine.say(sentence)
+            engine.runAndWait()
+            choice = input("⏸️ Type 'stop' to cancel voice playback or press Enter to continue: ").strip().lower()
+            if choice == 'stop': #skip reading or interrupt the voice 
+                engine.stop()
+                print("🛑 Voice playback stopped.")
+                break
+
+# 🗣️ Voice Recognition Function
+def listen():
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("\n Listening...")
+        audio = recognizer.listen(source)
+    try:
+        return recognizer.recognize_google(audio)
+    except sr.UnknownValueError:
+        print("❌ Didn't catch that.")
+        return ""
+    except sr.RequestError as e:
+        print(f"⚠️ Error: {e}")
+        return ""
+
+# 💬 Gemini Instructions 
+config = types.GenerateContentConfig(
+    thinking_config=types.ThinkingConfig(thinking_budget=-1),
+    response_mime_type="text/plain",
+    system_instruction=[
+        types.Part.from_text(
+            text="""Be friendly, warm, and clear. Help students with code in any programming language and tech career doubts. Keep responses concise unless asked for details. Encourage and support."""
+        ),
+    ],
+)
+
+print("✨ Welcome to Gemini VoiceBot!")
+print("Type 'speak on' to enable voice input or 'speak off' to return to text mode.\n")
+
+# 🌀 Main Loop
+while True:
+    if voice_mode:
+        question = listen()
+        if not question:
+            continue
+        print(f"\n📝 Transcribed: '{question}'")
+        confirm = input("✏️ Press Enter to proceed  or type correction: ").strip()
+        if confirm:
+            question = confirm
+    else:
+        question = input("\nYou: ").strip()
+
+    # 🚪To  Exit  and End the COnversation  / Clear
+    if question.lower() in ['exit', 'quit', 'bye']:
+        print("Chatbot: Conversation ended! Catch you later 😄")
+        break
+    if question.lower() == 'clear':
+        history.clear()
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print("Chatbot: History cleared and screen refreshed ✨")
+        continue
+    if not question:
+        print("Chatbot: Type something or 'exit' to quit 🚪")
+        continue
+
+    # 🎛️ Toggle Voice
+    if question.lower() == 'speak on':
+        voice_mode = True
+        print("🔊 Voice mode activated.")
+        continue
+    if question.lower() == 'speak off':
+        voice_mode = False
+        print("🔇 Voice mode deactivated.")
+        continue
+
+    # 🧠 Gemini API Call
+    contents = history + [
+        types.Content(role="user", parts=[types.Part.from_text(text=question)])
+    ]
+
+    try:
+        response_text = ""
+        for chunk in client.models.generate_content_stream(
+            model=model,
+            contents=contents,
+            config=config,
+        ):
+            if chunk.text:
+                response_text += chunk.text
+
+        # 🔉 Speak first, then show text
+        if voice_mode:
+            speak_chunked(response_text.strip())
+
+        print(f"\nChatbot: {response_text.strip()}")
+        #Display Token Usage display after each request 
+        print(f"📊 Tokens used: {chunk.usage_metadata.total_token_count}")
+
+        # 🔗 Update History
+        history.extend([
+            types.Content(role="user", parts=[types.Part.from_text(text=question)]),
+            types.Content(role="model", parts=[types.Part.from_text(text=response_text)])
+        ])
+
+    except Exception as e:
+        print(f"❌ Error: {e}")
