@@ -28,7 +28,7 @@ def speak_chunked(text):
 def listen():
     recognizer = sr.Recognizer()
     with sr.Microphone() as source:
-        print("\n Listening...")
+        print("🎧\n Listening...")
         audio = recognizer.listen(source)
     try:
         return recognizer.recognize_google(audio)
